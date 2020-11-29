@@ -4,8 +4,6 @@ import com.tallerdevehiculos.reparaciones.entity.Repair;
 import com.tallerdevehiculos.reparaciones.repository.RepairRepository;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import com.amazonaws.services.dynamodbv2.datamodeling.PaginatedScanList;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -15,9 +13,8 @@ import java.util.List;
 @RequestMapping(value = "/repairs")
 @SpringBootApplication
 public class ReparacionesApplication {
-    @Autowired
 
-    private RepairRepository repository;
+    private RepairRepository repository= RepairRepository.getInstance();
 
     @GetMapping("/{rId}")
     public Repair GetRepair(@PathVariable String rId){
@@ -40,7 +37,7 @@ public class ReparacionesApplication {
         return repository.deleteRepair(repair);
     }
     @GetMapping
-    public PaginatedScanList<Repair> GetAllVehicles(){
+    public List<Repair> GetAllVehicles(){
         return repository.findAllVehicles();
     }
 

@@ -1,64 +1,179 @@
 package com.tallerdevehiculos.reparaciones.repository;
 
-import com.amazonaws.services.dynamodbv2.datamodeling.*;
-import com.amazonaws.services.dynamodbv2.model.AttributeValue;
-import com.amazonaws.services.dynamodbv2.model.ExpectedAttributeValue;
-
+import com.google.api.core.ApiFuture;
+import com.google.cloud.firestore.*;
+import com.tallerdevehiculos.reparaciones.config.FirebaseConfig;
 import com.tallerdevehiculos.reparaciones.entity.Repair;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 
-@Repository
+
 public class RepairRepository {
-    @Autowired
-    private DynamoDBMapper mapper;
 
+    private static FirebaseConfig firebase= new FirebaseConfig();
+    private static Firestore db=firebase.getInstance();
+    public static RepairRepository repository= null;
+
+    public static RepairRepository getInstance() {
+        if (repository == null){
+            repository = new RepairRepository();
+        }
+        return repository;
+    }
     public Repair addRepair  (Repair repair){
-        mapper.save(repair);
+        DocumentReference docRef = db.collection("repairs").document();
+        repair.setrId(docRef.getId());
+//asynchronously write data
+        ApiFuture<WriteResult> result = docRef.set(repair);
+// result.get() blocks on response
+        try {
+            System.out.println("Update time : " + result.get().getUpdateTime());
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } catch (ExecutionException e) {
+            e.printStackTrace();
+        }
+
         return repair;
     }
 
     public  Repair  findRepairById (String rId){
-        return mapper.load(Repair.class,rId);
+
+        DocumentReference docRef = db.collection("repairs").document(rId);
+// asynchronously retrieve the document
+        ApiFuture<DocumentSnapshot> future = docRef.get();
+// ...
+// future.get() blocks on response
+        DocumentSnapshot document = null;
+        try {
+            document = future.get();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } catch (ExecutionException e) {
+            e.printStackTrace();
+        }
+        Repair repair = null;
+        if (document.exists()) {
+            // convert document to POJO
+            repair = document.toObject(Repair.class);
+            return repair;
+        }
+        return repair;
     }
 
-    public PaginatedScanList<Repair> findAllVehicles() {
-        return mapper.scan(Repair.class, new DynamoDBScanExpression());
+    public List<Repair> findAllVehicles() {
+
+        //asynchronously retrieve all documents
+        ApiFuture<QuerySnapshot> future = db.collection("repairs").get();
+// future.get() blocks on response
+        List<QueryDocumentSnapshot> documents = null;
+        try {
+            documents = future.get().getDocuments();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } catch (ExecutionException e) {
+            e.printStackTrace();
+        }
+        List<Repair> lista = new ArrayList<Repair>();
+
+        for (DocumentSnapshot document : documents)
+        {
+            lista.add(document.toObject(Repair.class));
+        }
+        return lista;
     }
 
     public List<Repair> findRepairByPlate (String licensePlateVehicle){
 
-        HashMap<String, AttributeValue> eav = new HashMap<String, AttributeValue>();
-        eav.put(":v1", new AttributeValue().withS(licensePlateVehicle));
+        ApiFuture<QuerySnapshot> future =
+                db.collection("repairs").whereEqualTo("licensePlateVehicle", licensePlateVehicle).get();
+// future.get() blocks on response
+        List<QueryDocumentSnapshot> documents = null;
+        try {
+            documents = future.get().getDocuments();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } catch (ExecutionException e) {
+            e.printStackTrace();
+        }
+        List<Repair> lista = new ArrayList<Repair>();
 
-        DynamoDBScanExpression scanExpression = new DynamoDBScanExpression()
-                .withFilterExpression("licensePlateVehicle = :v1")
-                .withExpressionAttributeValues(eav);
-
-        List<Repair> replies =  mapper.scan(Repair.class, scanExpression);
-
-        return replies;
+        for (DocumentSnapshot document : documents)
+        {
+            lista.add(document.toObject(Repair.class));
+        }
+        return lista;
     }
 
     public  String deleteRepair  (Repair  repair ){
-        mapper.delete(repair);
-        return "El vehiculo fue eliminado";
+
+        ApiFuture<WriteResult> writeResult = db.collection("repairs").document(repair.getrId()).delete();
+// ...
+        try {
+            System.out.println("Update time : " + writeResult.get().getUpdateTime());
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+
+            return "{" +
+                    "\"status\"" +": \"0\""+
+                    "}";
+
+        } catch (ExecutionException e) {
+            e.printStackTrace();
+
+            return "{" +
+                    "\"status\"" +": \"0\""+
+                    "}";
+        }
+
+        return "{" +
+                "\"status\""+":\"1\""+
+                "}";
     }
 
     public  String editVehicle (Repair  repair ){
-        mapper.save(repair,buildExpression(repair));
-        return "Cambios realizados";
-    }
 
-    private DynamoDBSaveExpression buildExpression(Repair repair){
-        DynamoDBSaveExpression dynamoDBSaveExpression=new DynamoDBSaveExpression();
-        Map<String, ExpectedAttributeValue>expectedMap= new HashMap<>();
-        expectedMap.put("rId",new ExpectedAttributeValue(new AttributeValue().withS(repair.getrId())) );
-        dynamoDBSaveExpression.setExpected(expectedMap);
-        return dynamoDBSaveExpression;
+        DocumentReference docRef = db.collection("repairs").document(repair.getrId());
+
+        Map<String, Object> updates = new HashMap<>();
+        updates.put("repairDate", repair.getRepairDate());
+        updates.put("repairBy", repair.getRepairBy());
+        updates.put("state", repair.getState());
+        updates.put("listStates", repair.getListStates());
+        updates.put("spareParts", repair.getSpareParts());
+        updates.put("cost", repair.getCost());
+        updates.put("partsCost", repair.getPartsCost());
+        updates.put("inCharge", repair.getInCharge());
+
+
+// (async) Update one field
+        ApiFuture<WriteResult> future = docRef.update(updates);
+
+// ...
+        WriteResult result = null;
+        try {
+            result = future.get();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+
+            return "{" +
+                    "\"status\"" +": \"0\""+
+                    "}";
+
+        } catch (ExecutionException e) {
+            e.printStackTrace();
+
+            return "{" +
+                    "\"status\"" +": \"0\""+
+                    "}";
+        }
+
+        return "{" +
+                "\"status\""+":\"1\""+
+                "}";
     }
 }
